@@ -53,7 +53,6 @@ pub mod lib {
     }
 }
 
-mod archives;
 mod extern_ref;
 mod features;
 mod indexes;
@@ -92,8 +91,6 @@ pub use types::{
     ExportType, ExternType, FunctionType, GlobalInit, GlobalType, ImportType, MemoryType,
     Mutability, TableType, Type, V128,
 };
-
-pub use archives::ArchivableIndexMap;
 
 pub use crate::libcalls::LibCall;
 pub use crate::memory::MemoryStyle;
