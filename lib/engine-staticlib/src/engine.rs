@@ -4,11 +4,11 @@ use std::path::Path;
 use std::sync::{Arc, Mutex};
 #[cfg(feature = "compiler")]
 use wasmer_compiler::Compiler;
-use wasmer_compiler::{CompileError, Target};
+use wasmer_compiler::Target;
 use wasmer_engine::{Artifact, DeserializeError, Engine, EngineId, Tunables};
 #[cfg(feature = "compiler")]
 use wasmer_types::Features;
-use wasmer_types::FunctionType;
+use wasmer_types::{CompileError, FunctionType};
 use wasmer_vm::{
     FuncDataRegistry, SignatureRegistry, VMCallerCheckedAnyfunc, VMFuncRef, VMSharedSignatureIndex,
 };

@@ -9,14 +9,12 @@ use std::error::Error;
 use std::mem;
 use std::sync::Arc;
 use wasmer_artifact::ArtifactCreate;
-use wasmer_compiler::{
-    CompileError, CpuFeature, Features, OperatingSystem, SymbolRegistry, Triple,
-};
 #[cfg(feature = "compiler")]
 use wasmer_compiler::{
     CompileModuleInfo, Compiler, FunctionBodyData, ModuleEnvironment, ModuleMiddlewareChain,
     ModuleTranslationState,
 };
+use wasmer_compiler::{CpuFeature, Features, OperatingSystem, SymbolRegistry, Triple};
 use wasmer_engine::{
     Artifact, DeserializeError, InstantiationError, MetadataHeader, SerializeError,
 };
@@ -29,7 +27,7 @@ use wasmer_types::entity::{BoxedSlice, PrimaryMap};
 #[cfg(feature = "compiler")]
 use wasmer_types::DataInitializer;
 use wasmer_types::{
-    FunctionIndex, LocalFunctionIndex, MemoryIndex, ModuleInfo, OwnedDataInitializer,
+    CompileError, FunctionIndex, LocalFunctionIndex, MemoryIndex, ModuleInfo, OwnedDataInitializer,
     SignatureIndex, TableIndex,
 };
 use wasmer_vm::{
