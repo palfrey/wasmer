@@ -1,8 +1,6 @@
 //! Define `UniversalArtifactBuild` to allow compiling and instantiating to be
 //! done as separate steps.
 
-use crate::serialize::SerializableCompilation;
-use crate::serialize::SerializableModule;
 #[cfg(feature = "compiler")]
 use crate::trampoline::{libcall_trampoline_len, make_libcall_trampolines};
 use crate::{ArtifactCreate, UniversalEngineBuilder};
@@ -21,6 +19,7 @@ use wasmer_types::{
     TableIndex, TableStyle,
 };
 use wasmer_types::{CompileModuleInfo, CompiledFunctionFrameInfo, FunctionBody};
+use wasmer_types::{SerializableCompilation, SerializableModule};
 
 /// A compiled wasm module, ready to be instantiated.
 pub struct UniversalArtifactBuild {

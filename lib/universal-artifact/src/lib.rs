@@ -21,12 +21,10 @@
 
 mod artifact;
 mod engine;
-mod serialize;
 mod trampoline;
 
 pub use crate::artifact::UniversalArtifactBuild;
 pub use crate::engine::UniversalEngineBuilder;
-pub use crate::serialize::SerializableModule;
 pub use crate::trampoline::*;
 pub use wasmer_artifact::{ArtifactCreate, MetadataHeader, Upcastable};
 

@@ -63,6 +63,7 @@ mod libcalls;
 mod memory;
 mod module;
 mod native;
+mod serialize;
 mod table;
 mod trapcode;
 mod types;
@@ -71,6 +72,7 @@ mod utils;
 mod values;
 mod vmoffsets;
 
+pub use crate::serialize::{SerializableCompilation, SerializableModule};
 pub use error::{
     CompileError, DeserializeError, ImportError, MiddlewareError, ParseCpuFeatureError,
     PreInstantiationError, SerializeError, WasmError, WasmResult,

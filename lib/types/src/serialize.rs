@@ -1,16 +1,18 @@
+use crate::entity::PrimaryMap;
+use crate::{
+    CompileModuleInfo, CompiledFunctionFrameInfo, CustomSection, DeserializeError, Dwarf,
+    FunctionBody, FunctionIndex, LocalFunctionIndex, OwnedDataInitializer, Relocation,
+    SectionIndex, SerializeError, SignatureIndex,
+};
 use rkyv::{
     archived_value, de::deserializers::SharedDeserializeMap, ser::serializers::AllocSerializer,
     ser::Serializer as RkyvSerializer, Archive, Deserialize as RkyvDeserialize,
     Serialize as RkyvSerialize,
 };
-use wasmer_types::entity::PrimaryMap;
-use wasmer_types::{CompileModuleInfo, CompiledFunctionFrameInfo, Dwarf, FunctionBody};
-use wasmer_types::{CustomSection, Relocation, SectionIndex};
-use wasmer_types::{DeserializeError, SerializeError};
-use wasmer_types::{FunctionIndex, LocalFunctionIndex, OwnedDataInitializer, SignatureIndex};
 
 /// The compilation related data for a serialized modules
 #[derive(Archive, RkyvDeserialize, RkyvSerialize)]
+#[allow(missing_docs)]
 pub struct SerializableCompilation {
     pub function_bodies: PrimaryMap<LocalFunctionIndex, FunctionBody>,
     pub function_relocations: PrimaryMap<LocalFunctionIndex, Vec<Relocation>>,
@@ -30,6 +32,7 @@ pub struct SerializableCompilation {
 /// Serializable struct that is able to serialize from and to
 /// a `UniversalArtifactInfo`.
 #[derive(Archive, RkyvDeserialize, RkyvSerialize)]
+#[allow(missing_docs)]
 pub struct SerializableModule {
     /// The main serializable compilation object
     pub compilation: SerializableCompilation,

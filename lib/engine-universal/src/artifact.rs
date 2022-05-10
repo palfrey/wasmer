@@ -14,11 +14,11 @@ use wasmer_engine::{
 #[cfg(feature = "compiler")]
 use wasmer_engine::{Engine, Tunables};
 use wasmer_engine_universal_artifact::ArtifactCreate;
-use wasmer_engine_universal_artifact::{SerializableModule, UniversalArtifactBuild};
+use wasmer_engine_universal_artifact::UniversalArtifactBuild;
 use wasmer_types::entity::{BoxedSlice, PrimaryMap};
 use wasmer_types::{
     CompileError, DeserializeError, FunctionIndex, LocalFunctionIndex, MemoryIndex, ModuleInfo,
-    OwnedDataInitializer, SerializeError, SignatureIndex, TableIndex,
+    OwnedDataInitializer, SerializableModule, SerializeError, SignatureIndex, TableIndex,
 };
 use wasmer_vm::{
     FuncDataRegistry, FunctionBodyPtr, MemoryStyle, TableStyle, VMSharedSignatureIndex,
