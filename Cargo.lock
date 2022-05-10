@@ -2869,12 +2869,8 @@ version = "2.3.0"
 dependencies = [
  "enumset",
  "hashbrown 0.11.2",
- "rkyv",
- "serde",
- "serde_bytes",
  "smallvec",
  "target-lexicon 0.12.4",
- "thiserror",
  "wasmer-types",
  "wasmparser 0.83.0",
 ]
@@ -2990,14 +2986,10 @@ name = "wasmer-engine"
 version = "2.3.0"
 dependencies = [
  "backtrace",
- "enumset",
  "lazy_static",
  "memmap2",
  "more-asserts",
  "rustc-demangle",
- "serde",
- "serde_bytes",
- "target-lexicon 0.12.4",
  "thiserror",
  "wasmer-artifact",
  "wasmer-compiler",
@@ -3122,9 +3114,7 @@ dependencies = [
  "memoffset",
  "more-asserts",
  "region",
- "rkyv",
  "scopeguard",
- "serde",
  "thiserror",
  "wasmer-artifact",
  "wasmer-types",
