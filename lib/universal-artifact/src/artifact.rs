@@ -6,7 +6,6 @@ use crate::trampoline::{libcall_trampoline_len, make_libcall_trampolines};
 use crate::{ArtifactCreate, UniversalEngineBuilder};
 use enumset::EnumSet;
 use std::mem;
-use std::sync::Arc;
 use wasmer_artifact::MetadataHeader;
 use wasmer_compiler::{
     CpuFeature, Features, ModuleEnvironment, ModuleMiddlewareChain, Target, Triple,
@@ -57,7 +56,7 @@ impl UniversalArtifactBuild {
         middlewares.apply_on_module_info(&mut module);
 
         let compile_info = CompileModuleInfo {
-            module: Arc::new(module),
+            module,
             features: features.clone(),
             memory_styles,
             table_styles,
@@ -186,16 +185,8 @@ impl UniversalArtifactBuild {
 }
 
 impl ArtifactCreate for UniversalArtifactBuild {
-    fn module(&self) -> Arc<ModuleInfo> {
+    fn create_module_info(&self) -> ModuleInfo {
         self.serializable.compile_info.module.clone()
-    }
-
-    fn module_ref(&self) -> &ModuleInfo {
-        &self.serializable.compile_info.module
-    }
-
-    fn module_mut(&mut self) -> Option<&mut ModuleInfo> {
-        Arc::get_mut(&mut self.serializable.compile_info.module)
     }
 
     fn features(&self) -> &Features {

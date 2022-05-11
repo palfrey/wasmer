@@ -1,5 +1,6 @@
 use crate::{resolve_imports, Export, InstantiationError, RuntimeError, Tunables};
 use std::any::Any;
+use std::sync::Arc;
 pub use wasmer_artifact::MetadataHeader;
 use wasmer_artifact::{ArtifactCreate, Upcastable};
 use wasmer_compiler::CpuFeature;
@@ -70,7 +71,7 @@ pub trait Artifact: Send + Sync + Upcastable + ArtifactCreate {
 
         self.preinstantiate()?;
 
-        let module = self.module();
+        let module = Arc::new(self.create_module_info());
         let (imports, import_function_envs) = {
             let mut imports = resolve_imports(
                 &module,

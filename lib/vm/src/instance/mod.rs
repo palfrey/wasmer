@@ -906,7 +906,14 @@ impl InstanceHandle {
             .map(|m| m.vmglobal())
             .collect::<PrimaryMap<LocalGlobalIndex, _>>()
             .into_boxed_slice();
-        let passive_data = RefCell::new(module.passive_data.clone());
+        let passive_data = RefCell::new(
+            module
+                .passive_data
+                .clone()
+                .into_iter()
+                .map(|(idx, bytes)| (idx, Arc::from(bytes)))
+                .collect::<HashMap<_, _>>(),
+        );
 
         let handle = {
             let offsets = allocator.offsets().clone();

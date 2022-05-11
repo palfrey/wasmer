@@ -24,7 +24,7 @@ use wasmer_vm::{
 /// Serializable struct for the artifact
 #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
 pub struct DummyArtifactMetadata {
-    pub module: Arc<ModuleInfo>,
+    pub module: ModuleInfo,
     pub features: Features,
     pub data_initializers: Box<[OwnedDataInitializer]>,
     // Plans for that module
@@ -98,7 +98,7 @@ impl DummyArtifact {
             .into_boxed_slice();
 
         let metadata = DummyArtifactMetadata {
-            module: Arc::new(translation.module),
+            module: translation.module,
             features: Features::default(),
             data_initializers,
             memory_styles,
@@ -191,16 +191,8 @@ impl DummyArtifact {
 }
 
 impl ArtifactCreate for DummyArtifact {
-    fn module(&self) -> Arc<ModuleInfo> {
+    fn create_module_info(&self) -> ModuleInfo {
         self.metadata.module.clone()
-    }
-
-    fn module_ref(&self) -> &ModuleInfo {
-        &self.metadata.module
-    }
-
-    fn module_mut(&mut self) -> Option<&mut ModuleInfo> {
-        Arc::get_mut(&mut self.metadata.module)
     }
 
     fn features(&self) -> &Features {

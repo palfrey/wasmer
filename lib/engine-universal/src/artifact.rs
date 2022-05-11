@@ -107,13 +107,14 @@ impl UniversalArtifact {
         engine_inner: &mut UniversalEngineInner,
         artifact: UniversalArtifactBuild,
     ) -> Result<Self, CompileError> {
+        let module_info = artifact.create_module_info();
         let (
             finished_functions,
             finished_function_call_trampolines,
             finished_dynamic_function_trampolines,
             custom_sections,
         ) = engine_inner.allocate(
-            artifact.module_ref(),
+            &module_info,
             artifact.get_function_bodies_ref(),
             artifact.get_function_call_trampolines_ref(),
             artifact.get_dynamic_function_trampolines_ref(),
@@ -121,7 +122,7 @@ impl UniversalArtifact {
         )?;
 
         link_module(
-            artifact.module_ref(),
+            &module_info,
             &finished_functions,
             artifact.get_function_relocations(),
             &custom_sections,
@@ -133,8 +134,7 @@ impl UniversalArtifact {
         // Compute indices into the shared signature table.
         let signatures = {
             let signature_registry = engine_inner.signatures();
-            artifact
-                .module()
+            module_info
                 .signatures
                 .values()
                 .map(|sig| signature_registry.register(sig))
@@ -198,16 +198,8 @@ impl UniversalArtifact {
 }
 
 impl ArtifactCreate for UniversalArtifact {
-    fn module(&self) -> Arc<ModuleInfo> {
-        self.artifact.module()
-    }
-
-    fn module_ref(&self) -> &ModuleInfo {
-        self.artifact.module_ref()
-    }
-
-    fn module_mut(&mut self) -> Option<&mut ModuleInfo> {
-        self.artifact.module_mut()
+    fn create_module_info(&self) -> ModuleInfo {
+        self.artifact.create_module_info()
     }
 
     fn features(&self) -> &Features {
@@ -254,7 +246,7 @@ impl Artifact for UniversalArtifact {
 
         let frame_infos = self.artifact.get_frame_info_ref();
         *info = register_frame_info(
-            self.artifact.module(),
+            self.artifact.create_module_info(),
             &finished_function_extents,
             frame_infos.clone(),
         );
