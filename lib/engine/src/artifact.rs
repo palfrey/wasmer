@@ -1,11 +1,11 @@
 use crate::{resolve_imports, Export, InstantiationError, RuntimeError, Tunables};
 use std::any::Any;
 use std::sync::Arc;
+use wasmer_artifact::ArtifactCreate;
 pub use wasmer_artifact::MetadataHeader;
-use wasmer_artifact::{ArtifactCreate, Upcastable};
 use wasmer_compiler::CpuFeature;
 use wasmer_types::entity::BoxedSlice;
-use wasmer_types::{DataInitializer, FunctionIndex, LocalFunctionIndex, SignatureIndex};
+use wasmer_types::{FunctionIndex, LocalFunctionIndex, SignatureIndex};
 use wasmer_vm::{
     FuncDataRegistry, FunctionBodyPtr, InstanceAllocator, InstanceHandle, TrapHandler,
     VMSharedSignatureIndex, VMTrampoline,
@@ -20,7 +20,7 @@ use wasmer_vm::{
 ///
 /// The `ArtifactRun` contains the extra information needed to run the
 /// module at runtime, such as [`ModuleInfo`] and [`Features`].
-pub trait Artifact: Send + Sync + Upcastable + ArtifactCreate {
+pub trait Artifact: Send + Sync + ArtifactCreate {
     /// Register thie `Artifact` stack frame information into the global scope.
     ///
     /// This is required to ensure that any traps can be properly symbolicated.
@@ -135,30 +135,9 @@ pub trait Artifact: Send + Sync + Upcastable + ArtifactCreate {
         trap_handler: &(dyn TrapHandler + 'static),
         handle: &InstanceHandle,
     ) -> Result<(), InstantiationError> {
-        let data_initializers = self
-            .data_initializers()
-            .iter()
-            .map(|init| DataInitializer {
-                location: init.location.clone(),
-                data: &*init.data,
-            })
-            .collect::<Vec<_>>();
+        let data_initializers = self.data_initializers();
         handle
             .finish_instantiation(trap_handler, &data_initializers)
             .map_err(|trap| InstantiationError::Start(RuntimeError::from_trap(trap)))
-    }
-}
-
-impl dyn Artifact + 'static {
-    /// Try to downcast the artifact into a given type.
-    #[inline]
-    pub fn downcast_ref<T: 'static>(&'_ self) -> Option<&'_ T> {
-        self.upcast_any_ref().downcast_ref::<T>()
-    }
-
-    /// Try to downcast the artifact into a given type mutably.
-    #[inline]
-    pub fn downcast_mut<T: 'static>(&'_ mut self) -> Option<&'_ mut T> {
-        self.upcast_any_mut().downcast_mut::<T>()
     }
 }

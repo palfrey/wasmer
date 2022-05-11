@@ -23,7 +23,7 @@ mod artifact;
 mod engine;
 mod trampoline;
 
-pub use crate::artifact::UniversalArtifactBuild;
+pub use crate::artifact::{UniversalArtifactBuild, UniversalArtifactBuildRef};
 pub use crate::engine::UniversalEngineBuilder;
 pub use crate::trampoline::*;
 pub use wasmer_artifact::{ArtifactCreate, MetadataHeader, Upcastable};

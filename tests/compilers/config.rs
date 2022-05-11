@@ -1,5 +1,5 @@
 use std::sync::Arc;
-use wasmer::{CompilerConfig, Engine as WasmerEngine, Features, ModuleMiddleware, Store};
+use wasmer::{CompilerConfig, Features, ModuleMiddleware, Store, UniversalEngine};
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Compiler {
@@ -48,44 +48,24 @@ impl Config {
     pub fn store(&self) -> Store {
         let compiler_config = self.compiler_config(self.canonicalize_nans);
         let engine = self.engine(compiler_config);
-        Store::new(&*engine)
+        Store::new(Arc::new(engine))
     }
 
     pub fn headless_store(&self) -> Store {
         let engine = self.engine_headless();
-        Store::new(&*engine)
+        Store::new(Arc::new(engine))
     }
 
-    pub fn engine(&self, compiler_config: Box<dyn CompilerConfig>) -> Box<dyn WasmerEngine> {
-        #[cfg(not(feature = "engine"))]
-        compile_error!("Plese enable at least one engine via the features");
-        match &self.engine {
-            #[cfg(feature = "universal")]
-            Engine::Universal => {
-                let mut engine = wasmer_engine_universal::Universal::new(compiler_config);
-                if let Some(ref features) = self.features {
-                    engine = engine.features(features.clone())
-                }
-                Box::new(engine.engine())
-            }
-            #[allow(unreachable_patterns)]
-            engine => panic!(
-                "The {:?} Engine is not enabled. Please enable it using the features",
-                engine
-            ),
+    pub fn engine(&self, compiler_config: Box<dyn CompilerConfig>) -> UniversalEngine {
+        let mut engine = wasmer_engine_universal::Universal::new(compiler_config);
+        if let Some(ref features) = self.features {
+            engine = engine.features(features.clone())
         }
+        engine.engine()
     }
 
-    pub fn engine_headless(&self) -> Box<dyn WasmerEngine> {
-        match &self.engine {
-            #[cfg(feature = "universal")]
-            Engine::Universal => Box::new(wasmer_engine_universal::Universal::headless().engine()),
-            #[allow(unreachable_patterns)]
-            engine => panic!(
-                "The {:?} Engine is not enabled. Please enable it using the features",
-                engine
-            ),
-        }
+    pub fn engine_headless(&self) -> UniversalEngine {
+        wasmer_engine_universal::Universal::headless().engine()
     }
 
     pub fn compiler_config(&self, canonicalize_nans: bool) -> Box<dyn CompilerConfig> {

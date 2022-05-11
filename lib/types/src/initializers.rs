@@ -34,6 +34,12 @@ pub struct DataInitializerLocation {
     pub offset: usize,
 }
 
+impl From<&ArchivedDataInitializerLocation> for DataInitializerLocation {
+    fn from(it: &ArchivedDataInitializerLocation) -> Self {
+        crate::unrkyv(it)
+    }
+}
+
 /// A data initializer for linear memory.
 #[derive(Debug)]
 #[cfg_attr(feature = "enable-serde", derive(Serialize, Deserialize))]

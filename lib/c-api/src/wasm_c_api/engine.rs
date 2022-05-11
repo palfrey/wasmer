@@ -12,9 +12,8 @@ use super::unstable::target_lexicon::wasmer_target_t;
 use crate::error::update_last_error;
 use cfg_if::cfg_if;
 use std::sync::Arc;
-use wasmer_api::Engine;
 #[cfg(feature = "universal")]
-use wasmer_engine_universal::Universal;
+use wasmer_engine_universal::{Universal, UniversalEngine};
 
 /// Kind of compilers that can be used by the engines.
 ///
@@ -263,7 +262,7 @@ pub extern "C" fn wasm_config_set_engine(config: &mut wasm_config_t, engine: was
 /// cbindgen:ignore
 #[repr(C)]
 pub struct wasm_engine_t {
-    pub(crate) inner: Arc<dyn Engine + Send + Sync>,
+    pub(crate) inner: Arc<UniversalEngine>,
 }
 
 #[cfg(feature = "compiler")]
@@ -296,7 +295,7 @@ cfg_if! {
         #[no_mangle]
         pub extern "C" fn wasm_engine_new() -> Box<wasm_engine_t> {
             let compiler_config: Box<dyn CompilerConfig> = get_default_compiler_config();
-            let engine: Arc<dyn Engine + Send + Sync> = Arc::new(Universal::new(compiler_config).engine());
+            let engine: Arc<UniversalEngine> = Arc::new(Universal::new(compiler_config).engine());
             Box::new(wasm_engine_t { inner: engine })
         }
     } else if #[cfg(feature = "universal")] {
@@ -309,7 +308,7 @@ cfg_if! {
         /// cbindgen:ignore
         #[no_mangle]
         pub extern "C" fn wasm_engine_new() -> Box<wasm_engine_t> {
-            let engine: Arc<dyn Engine + Send + Sync> = Arc::new(Universal::headless().engine());
+            let engine: Arc<UniversalEngine> = Arc::new(Universal::headless().engine());
             Box::new(wasm_engine_t { inner: engine })
         }
     } else {
@@ -419,49 +418,33 @@ pub extern "C" fn wasm_engine_new_with_config(
                 compiler_config.canonicalize_nans(true);
             }
 
-            let inner: Arc<dyn Engine + Send + Sync> = match config.engine {
-                wasmer_engine_t::UNIVERSAL => {
-                    cfg_if! {
-                        if #[cfg(feature = "universal")] {
-                            let mut builder = Universal::new(compiler_config);
+            let inner: Arc<UniversalEngine> = {
+                let mut builder = Universal::new(compiler_config);
 
-                            if let Some(target) = config.target {
-                                builder = builder.target(target.inner);
-                            }
+                if let Some(target) = config.target {
+                    builder = builder.target(target.inner);
+                }
 
-                            if let Some(features) = config.features {
-                                builder = builder.features(features.inner);
-                            }
+                if let Some(features) = config.features {
+                    builder = builder.features(features.inner);
+                }
 
-                            Arc::new(builder.engine())
-                        } else {
-                            return return_with_error("Wasmer has not been compiled with the `universal` feature.");
-                        }
-                    }
-                },
+                Arc::new(builder.engine())
             };
             Some(Box::new(wasm_engine_t { inner }))
         } else {
-            let inner: Arc<dyn Engine + Send + Sync> = match config.engine {
-                wasmer_engine_t::UNIVERSAL => {
-                    cfg_if! {
-                        if #[cfg(feature = "universal")] {
-                            let mut builder = Universal::headless();
+            let inner: Arc<UniversalEngine> = {
+                let mut builder = Universal::headless();
 
-                            if let Some(target) = config.target {
-                                builder = builder.target(target.inner);
-                            }
+                if let Some(target) = config.target {
+                    builder = builder.target(target.inner);
+                }
 
-                            if let Some(features) = config.features {
-                                builder = builder.features(features.inner);
-                            }
+                if let Some(features) = config.features {
+                    builder = builder.features(features.inner);
+                }
 
-                            Arc::new(builder.engine())
-                        } else {
-                            return return_with_error("Wasmer has not been compiled with the `universal` feature.");
-                        }
-                    }
-                },
+                Arc::new(builder.engine())
             };
             Some(Box::new(wasm_engine_t { inner }))
         }

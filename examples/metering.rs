@@ -70,7 +70,7 @@ fn main() -> anyhow::Result<()> {
     //
     // We use our previously create compiler configuration
     // with the Universal engine.
-    let store = Store::new(&Universal::new(compiler_config).engine());
+    let store = Store::new(Universal::new(compiler_config).engine().into());
 
     println!("Compiling module...");
     // Let's compile the Wasm module.

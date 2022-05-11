@@ -42,6 +42,18 @@ where
     pub(crate) unused: PhantomData<K>,
 }
 
+impl<K, V> From<&ArchivedPrimaryMap<K, V>> for PrimaryMap<K, V>
+where
+    K: EntityRef,
+    K: Archive,
+    V: Archive,
+    [<V as Archive>::Archived]: rkyv::DeserializeUnsized<[V], rkyv::Infallible>,
+{
+    fn from(it: &ArchivedPrimaryMap<K, V>) -> Self {
+        crate::unrkyv(it)
+    }
+}
+
 impl<K, V> PrimaryMap<K, V>
 where
     K: EntityRef,
@@ -235,6 +247,94 @@ where
             elems: Vec::from_iter(iter),
             unused: PhantomData,
         }
+    }
+}
+
+/// A reference to either a `PrimaryMap` or its archived mirror type, for key and value types that
+/// are the same as their archived type.
+pub enum PrimaryMapRef<'a, K, V>
+where
+    K: EntityRef,
+    V: Archive,
+    K: Archive,
+{
+    /// A reference to a `PrimaryMap`
+    Build(&'a PrimaryMap<K, V>),
+    /// A reference to an `ArchivedPrimaryMap`
+    Archived(&'a ArchivedPrimaryMap<K, V>),
+}
+
+impl<K, V> From<PrimaryMapRef<'_, K, V>> for PrimaryMap<K, V>
+where
+    K: EntityRef,
+    K: Archive,
+    V: Archive + Clone,
+    [<V as Archive>::Archived]: rkyv::DeserializeUnsized<[V], rkyv::Infallible>,
+{
+    fn from(it: PrimaryMapRef<K, V>) -> Self {
+        match it {
+            PrimaryMapRef::Build(inner) => Self::clone(inner),
+            PrimaryMapRef::Archived(it) => crate::unrkyv(it),
+        }
+    }
+}
+
+/// Immutable indexing into an `PrimaryMap`.
+/// The indexed value must be in the map.
+impl<'a, K, V> Index<K> for PrimaryMapRef<'a, K, V>
+where
+    K: EntityRef,
+    V: Archive<Archived = V>,
+    K: Archive<Archived = K>,
+{
+    type Output = V;
+
+    fn index(&self, k: K) -> &V {
+        match self {
+            Self::Build(inner) => &inner[k],
+            Self::Archived(inner) => &inner.elems[k.index()],
+        }
+    }
+}
+
+impl<'a, K, V> PrimaryMapRef<'a, K, V>
+where
+    K: EntityRef,
+    V: Archive<Archived = V>,
+    K: Archive<Archived = K>,
+{
+    /// Get the total number of entity references created.
+    pub fn len(&self) -> usize {
+        match self {
+            Self::Build(inner) => inner.elems.len(),
+            Self::Archived(inner) => inner.elems.len(),
+        }
+    }
+
+    /// Is empty method.
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    /// Iterate over all the keys in this map.
+    pub fn keys(&self) -> Keys<K> {
+        Keys::with_len(self.len())
+    }
+
+    /// Iterate over all the values in this map.
+    pub fn values(&self) -> slice::Iter<V> {
+        match self {
+            Self::Build(inner) => inner.elems.iter(),
+            Self::Archived(inner) => inner.elems.iter(),
+        }
+    }
+
+    /// Iterate over all the keys and values in this map.
+    pub fn iter(&self) -> Iter<K, V> {
+        Iter::new(match self {
+            Self::Build(inner) => inner.elems.iter(),
+            Self::Archived(inner) => inner.elems.iter(),
+        })
     }
 }
 

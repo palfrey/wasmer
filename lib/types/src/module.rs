@@ -204,6 +204,19 @@ impl From<ArchivableModuleInfo> for ModuleInfo {
     }
 }
 
+impl From<&ArchivedArchivableModuleInfo> for ArchivableModuleInfo {
+    fn from(it: &ArchivedArchivableModuleInfo) -> Self {
+        crate::unrkyv(it)
+    }
+}
+
+impl From<&ArchivedArchivableModuleInfo> for ModuleInfo {
+    fn from(it: &ArchivedArchivableModuleInfo) -> Self {
+        let archivable: ArchivableModuleInfo = it.into();
+        Self::from(archivable)
+    }
+}
+
 impl From<&ModuleInfo> for ArchivableModuleInfo {
     fn from(it: &ModuleInfo) -> Self {
         Self::from(it.clone())

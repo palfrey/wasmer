@@ -1,12 +1,14 @@
 //! Universal compilation.
 
 use crate::{CodeMemory, UniversalArtifact};
+
 use std::sync::{Arc, Mutex};
 #[cfg(feature = "compiler")]
 use wasmer_compiler::Compiler;
 use wasmer_compiler::Target;
-use wasmer_engine::{Artifact, Engine, EngineId, FunctionExtent, Tunables};
+use wasmer_engine::{Engine, EngineId, FunctionExtent, Tunables};
 use wasmer_engine_universal_artifact::UniversalEngineBuilder;
+use wasmer_engine_universal_artifact::{UniversalArtifactBuild, UniversalArtifactBuildRef};
 use wasmer_types::entity::PrimaryMap;
 use wasmer_types::FunctionBody;
 use wasmer_types::{
@@ -77,9 +79,106 @@ impl UniversalEngine {
     pub(crate) fn inner_mut(&self) -> std::sync::MutexGuard<'_, UniversalEngineInner> {
         self.inner.lock().unwrap()
     }
+
+    /// The target
+    pub fn target(&self) -> &Target {
+        &self.target
+    }
+
+    /// Register a signature
+    pub fn register_signature(&self, func_type: &FunctionType) -> VMSharedSignatureIndex {
+        let compiler = self.inner();
+        compiler.signatures().register(func_type)
+    }
+
+    ///
+    pub fn register_function_metadata(&self, func_data: VMCallerCheckedAnyfunc) -> VMFuncRef {
+        let compiler = self.inner();
+        compiler.func_data().register(func_data)
+    }
+
+    /// Lookup a signature
+    pub fn lookup_signature(&self, sig: VMSharedSignatureIndex) -> Option<FunctionType> {
+        let compiler = self.inner();
+        compiler.signatures().lookup(sig)
+    }
+
+    /// Validates a WebAssembly module
+    pub fn validate(&self, binary: &[u8]) -> Result<(), CompileError> {
+        self.inner().validate(binary)
+    }
+
+    /// Compile a WebAssembly binary
+    #[cfg(feature = "compiler")]
+    pub fn compile_build(
+        &self,
+        binary: &[u8],
+        tunables: &dyn Tunables,
+    ) -> Result<UniversalArtifactBuild, CompileError> {
+        UniversalArtifact::new_build(self, binary, tunables)
+    }
+
+    /// Compile a WebAssembly binary
+    #[cfg(not(feature = "compiler"))]
+    pub fn compile_build(
+        &self,
+        _binary: &[u8],
+        _tunables: &dyn Tunables,
+    ) -> Result<UniversalArtifactBuild, CompileError> {
+        Err(CompileError::Codegen(
+            "The UniversalEngine is operating in headless mode, so it can not compile Modules."
+                .to_string(),
+        ))
+    }
+
+    /// Compile a WebAssembly binary
+    #[cfg(feature = "compiler")]
+    pub fn from_build(
+        &self,
+        build: UniversalArtifactBuildRef<'_>,
+    ) -> Result<UniversalArtifact, CompileError> {
+        UniversalArtifact::from_build(&mut self.inner(), build)
+    }
+
+    /// Compile a WebAssembly binary
+    #[cfg(not(feature = "compiler"))]
+    pub fn from_build(
+        &self,
+        _build: UniversalArtifactBuildRef<'_>,
+    ) -> Result<UniversalArtifact, CompileError> {
+        Err(CompileError::Codegen(
+            "The UniversalEngine is operating in headless mode, so it can not compile Modules."
+                .to_string(),
+        ))
+    }
+
+    /// Deserializes a WebAssembly module
+    ///
+    /// # Safety
+    ///
+    /// This method is unsafe since it deserialized a `UniversalArtifact` from a bytes source
+    /// without validating it.
+    pub unsafe fn deserialize(
+        &self,
+        bytes: &'_ [u8],
+    ) -> Result<UniversalArtifact, DeserializeError> {
+        UniversalArtifact::deserialize(self, bytes)
+    }
+
+    ///
+    pub fn id(&self) -> &EngineId {
+        &self.engine_id
+    }
+
+    ///
+    pub fn cloned(&self) -> Arc<dyn Engine<Artifact = UniversalArtifact> + Send + Sync> {
+        Arc::new(self.clone())
+    }
 }
 
 impl Engine for UniversalEngine {
+    type Artifact = UniversalArtifact;
+
     /// The target
     fn target(&self) -> &Target {
         &self.target
@@ -109,21 +208,42 @@ impl Engine for UniversalEngine {
 
     /// Compile a WebAssembly binary
     #[cfg(feature = "compiler")]
-    fn compile(
+    fn compile_build(
         &self,
         binary: &[u8],
         tunables: &dyn Tunables,
-    ) -> Result<Arc<dyn Artifact>, CompileError> {
-        Ok(Arc::new(UniversalArtifact::new(self, binary, tunables)?))
+    ) -> Result<UniversalArtifactBuild, CompileError> {
+        UniversalArtifact::new_build(self, binary, tunables)
     }
 
     /// Compile a WebAssembly binary
     #[cfg(not(feature = "compiler"))]
-    fn compile(
+    fn compile_build(
         &self,
         _binary: &[u8],
         _tunables: &dyn Tunables,
-    ) -> Result<Arc<dyn Artifact>, CompileError> {
+    ) -> Result<UniversalArtifactBuild, CompileError> {
+        Err(CompileError::Codegen(
+            "The UniversalEngine is operating in headless mode, so it can not compile Modules."
+                .to_string(),
+        ))
+    }
+
+    /// Compile a WebAssembly binary
+    #[cfg(feature = "compiler")]
+    fn from_build(
+        &self,
+        build: UniversalArtifactBuildRef<'_>,
+    ) -> Result<UniversalArtifact, CompileError> {
+        UniversalArtifact::from_build(&mut self.inner(), build)
+    }
+
+    /// Compile a WebAssembly binary
+    #[cfg(not(feature = "compiler"))]
+    fn from_build<'a>(
+        &self,
+        _build: UniversalArtifactBuildRef<'a>,
+    ) -> Result<UniversalArtifact, CompileError> {
         Err(CompileError::Codegen(
             "The UniversalEngine is operating in headless mode, so it can not compile Modules."
                 .to_string(),
@@ -131,15 +251,15 @@ impl Engine for UniversalEngine {
     }
 
     /// Deserializes a WebAssembly module
-    unsafe fn deserialize(&self, bytes: &[u8]) -> Result<Arc<dyn Artifact>, DeserializeError> {
-        Ok(Arc::new(UniversalArtifact::deserialize(self, bytes)?))
+    unsafe fn deserialize(&self, bytes: &[u8]) -> Result<UniversalArtifact, DeserializeError> {
+        UniversalArtifact::deserialize(self, bytes)
     }
 
     fn id(&self) -> &EngineId {
         &self.engine_id
     }
 
-    fn cloned(&self) -> Arc<dyn Engine + Send + Sync> {
+    fn cloned(&self) -> Arc<dyn Engine<Artifact = UniversalArtifact> + Send + Sync> {
         Arc::new(self.clone())
     }
 }
@@ -186,9 +306,9 @@ impl UniversalEngineInner {
     pub(crate) fn allocate(
         &mut self,
         _module: &ModuleInfo,
-        functions: &PrimaryMap<LocalFunctionIndex, FunctionBody>,
-        function_call_trampolines: &PrimaryMap<SignatureIndex, FunctionBody>,
-        dynamic_function_trampolines: &PrimaryMap<FunctionIndex, FunctionBody>,
+        functions: PrimaryMap<LocalFunctionIndex, FunctionBody>,
+        function_call_trampolines: PrimaryMap<SignatureIndex, FunctionBody>,
+        dynamic_function_trampolines: PrimaryMap<FunctionIndex, FunctionBody>,
         custom_sections: &PrimaryMap<SectionIndex, CustomSection>,
     ) -> Result<
         (

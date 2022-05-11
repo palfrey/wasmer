@@ -2993,21 +2993,7 @@ dependencies = [
  "thiserror",
  "wasmer-artifact",
  "wasmer-compiler",
- "wasmer-types",
- "wasmer-vm",
-]
-
-[[package]]
-name = "wasmer-engine-dummy"
-version = "2.3.0"
-dependencies = [
- "bincode",
- "enumset",
- "serde",
- "serde_bytes",
- "wasmer-artifact",
- "wasmer-compiler",
- "wasmer-engine",
+ "wasmer-engine-universal-artifact",
  "wasmer-types",
  "wasmer-vm",
 ]
@@ -3206,7 +3192,6 @@ dependencies = [
  "wasmer-compiler-singlepass",
  "wasmer-emscripten",
  "wasmer-engine",
- "wasmer-engine-dummy",
  "wasmer-engine-universal",
  "wasmer-middlewares",
  "wasmer-types",

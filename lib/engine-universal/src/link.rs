@@ -83,7 +83,7 @@ pub fn link_module(
     allocated_functions: &PrimaryMap<LocalFunctionIndex, FunctionExtent>,
     function_relocations: Relocations,
     allocated_sections: &PrimaryMap<SectionIndex, SectionBodyPtr>,
-    section_relocations: &PrimaryMap<SectionIndex, Vec<Relocation>>,
+    section_relocations: PrimaryMap<SectionIndex, Vec<Relocation>>,
     libcall_trampolines: SectionIndex,
     trampoline_len: usize,
 ) {

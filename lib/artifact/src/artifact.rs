@@ -4,11 +4,9 @@ use std::convert::TryInto;
 use std::path::Path;
 use std::{fs, mem};
 use wasmer_compiler::{CpuFeature, Features};
-use wasmer_types::entity::PrimaryMap;
+use wasmer_types::entity::PrimaryMapRef;
+use wasmer_types::{DataInitializer, MemoryIndex, MemoryStyle, ModuleInfo, TableIndex, TableStyle};
 use wasmer_types::{DeserializeError, SerializeError};
-use wasmer_types::{
-    MemoryIndex, MemoryStyle, ModuleInfo, OwnedDataInitializer, TableIndex, TableStyle,
-};
 
 /// An `Artifact` is the product that the `Engine`
 /// implementation produce and use.
@@ -16,7 +14,7 @@ use wasmer_types::{
 /// The `Artifact` contains the compiled data for a given
 /// module as well as extra information needed to run the
 /// module at runtime, such as [`ModuleInfo`] and [`Features`].
-pub trait ArtifactCreate: Send + Sync + Upcastable {
+pub trait ArtifactCreate: Send + Sync {
     /// Create a `ModuleInfo` for instantiation
     fn create_module_info(&self) -> ModuleInfo;
 
@@ -27,13 +25,13 @@ pub trait ArtifactCreate: Send + Sync + Upcastable {
     fn cpu_features(&self) -> EnumSet<CpuFeature>;
 
     /// Returns the memory styles associated with this `Artifact`.
-    fn memory_styles(&self) -> &PrimaryMap<MemoryIndex, MemoryStyle>;
+    fn memory_styles(&self) -> PrimaryMapRef<MemoryIndex, MemoryStyle>;
 
     /// Returns the table plans associated with this `Artifact`.
-    fn table_styles(&self) -> &PrimaryMap<TableIndex, TableStyle>;
+    fn table_styles(&self) -> PrimaryMapRef<TableIndex, TableStyle>;
 
     /// Returns data initializers to pass to `InstanceHandle::initialize`
-    fn data_initializers(&self) -> &[OwnedDataInitializer];
+    fn data_initializers(&'_ self) -> Vec<DataInitializer<'_>>;
 
     /// Serializes an artifact into bytes
     fn serialize(&self) -> Result<Vec<u8>, SerializeError>;
@@ -69,20 +67,6 @@ impl<T: Any + Send + Sync + 'static> Upcastable for T {
     #[inline]
     fn upcast_any_box(self: Box<Self>) -> Box<dyn Any> {
         self
-    }
-}
-
-impl dyn ArtifactCreate + 'static {
-    /// Try to downcast the artifact into a given type.
-    #[inline]
-    pub fn downcast_ref<T: 'static>(&'_ self) -> Option<&'_ T> {
-        self.upcast_any_ref().downcast_ref::<T>()
-    }
-
-    /// Try to downcast the artifact into a given type mutably.
-    #[inline]
-    pub fn downcast_mut<T: 'static>(&'_ mut self) -> Option<&'_ mut T> {
-        self.upcast_any_mut().downcast_mut::<T>()
     }
 }
 

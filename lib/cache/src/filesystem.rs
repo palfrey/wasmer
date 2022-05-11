@@ -91,14 +91,14 @@ impl Cache for FileSystemCache {
     type DeserializeError = DeserializeError;
     type SerializeError = SerializeError;
 
-    unsafe fn load(&self, store: &Store, key: Hash) -> Result<Module, Self::DeserializeError> {
-        let filename = if let Some(ref ext) = self.ext {
-            format!("{}.{}", key.to_string(), ext)
+    unsafe fn load(&self, _store: &Store, _key: Hash) -> Result<Module, Self::DeserializeError> {
+        let _filename = if let Some(ref ext) = self.ext {
+            format!("{}.{}", _key.to_string(), ext)
         } else {
-            key.to_string()
+            _key.to_string()
         };
-        let path = self.path.join(filename);
-        Module::deserialize_from_file(store, path)
+        let _path = self.path.join(_filename);
+        todo!("read file and store bytes in Self") //Module::deserialize_from_file(store, path)
     }
 
     fn store(&mut self, key: Hash, module: &Module) -> Result<(), Self::SerializeError> {

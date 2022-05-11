@@ -1,7 +1,7 @@
 use crate::error::LinkError;
 use std::ptr::NonNull;
 use std::sync::Arc;
-use wasmer_types::entity::{EntityRef, PrimaryMap};
+use wasmer_types::entity::{EntityRef, PrimaryMap, PrimaryMapRef};
 use wasmer_types::{
     GlobalType, LocalGlobalIndex, LocalMemoryIndex, LocalTableIndex, MemoryIndex, MemoryType,
     ModuleInfo, TableIndex, TableType,
@@ -68,7 +68,7 @@ pub trait Tunables {
     unsafe fn create_memories(
         &self,
         module: &ModuleInfo,
-        memory_styles: &PrimaryMap<MemoryIndex, MemoryStyle>,
+        memory_styles: PrimaryMapRef<MemoryIndex, MemoryStyle>,
         memory_definition_locations: &[NonNull<VMMemoryDefinition>],
     ) -> Result<PrimaryMap<LocalMemoryIndex, Arc<dyn Memory>>, LinkError> {
         let num_imports = module.num_imported_memories;
@@ -99,7 +99,7 @@ pub trait Tunables {
     unsafe fn create_tables(
         &self,
         module: &ModuleInfo,
-        table_styles: &PrimaryMap<TableIndex, TableStyle>,
+        table_styles: PrimaryMapRef<TableIndex, TableStyle>,
         table_definition_locations: &[NonNull<VMTableDefinition>],
     ) -> Result<PrimaryMap<LocalTableIndex, Arc<dyn Table>>, LinkError> {
         let num_imports = module.num_imported_tables;

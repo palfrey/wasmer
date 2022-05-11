@@ -44,6 +44,7 @@
 //!
 //! Ready?
 
+use std::io::Read;
 use tempfile::NamedTempFile;
 use wasmer::imports;
 use wasmer::wat2wasm;
@@ -57,7 +58,7 @@ use wasmer_engine_universal::Universal;
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // First step, let's compile the Wasm module and serialize it.
     // Note: we need a compiler here.
-    let serialized_module_file = {
+    let mut serialized_module_file = {
         // Let's declare the Wasm module with the text representation.
         let wasm_bytes = wat2wasm(
             r#"
@@ -84,7 +85,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let engine = Universal::new(compiler_config).engine();
 
         // Create a store, that holds the engine.
-        let store = Store::new(&engine);
+        let store = Store::new(engine.into());
 
         println!("Compiling module...");
         // Let's compile the Wasm module.
@@ -105,7 +106,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("Creating headless Universal engine...");
         // We create a headless Universal engine.
         let engine = Universal::headless().engine();
-        let store = Store::new(&engine);
+        let store = Store::new(engine.into());
 
         println!("Deserializing module...");
         // Here we go.
@@ -114,7 +115,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         // because Wasmer can't assert the bytes are valid (see the
         // `wasmer::Module::deserialize`'s documentation to learn
         // more).
-        let module = unsafe { Module::deserialize_from_file(&store, serialized_module_file) }?;
+        let mut bytes = vec![];
+        serialized_module_file.read_to_end(&mut bytes)?;
+        let module = unsafe { Module::deserialize(&store, &bytes) }?;
 
         // Congrats, the Wasm module has been deserialized! Now let's
         // execute it for the sake of having a complete example.

@@ -21,14 +21,6 @@ pub struct StoreOptions {
     #[cfg(feature = "compiler")]
     #[structopt(flatten)]
     compiler: CompilerOptions,
-
-    /// Use the Universal Engine.
-    #[structopt(long, conflicts_with_all = &["jit"])]
-    universal: bool,
-
-    /// Use the JIT (Universal) Engine.
-    #[structopt(long, hidden = true, conflicts_with_all = &["universal"])]
-    jit: bool,
 }
 
 #[cfg(feature = "compiler")]
@@ -108,38 +100,23 @@ impl CompilerOptions {
     }
 
     /// Gets the Store for a given target and engine.
-    pub fn get_store_for_target_and_engine(
-        &self,
-        target: Target,
-        engine_type: EngineType,
-    ) -> Result<(Store, CompilerType)> {
+    pub fn get_store_for_target_and_engine(&self, target: Target) -> Result<(Store, CompilerType)> {
         let (compiler_config, compiler_type) = self.get_compiler_config()?;
-        let engine = self.get_engine_by_type(target, compiler_config, engine_type)?;
-        let store = Store::new(&*engine);
+        let engine = self.get_engine(target, compiler_config)?;
+        let store = Store::new(Arc::new(engine));
         Ok((store, compiler_type))
     }
 
-    fn get_engine_by_type(
+    fn get_engine(
         &self,
         target: Target,
         compiler_config: Box<dyn CompilerConfig>,
-        engine_type: EngineType,
-    ) -> Result<Box<dyn Engine + Send + Sync>> {
+    ) -> Result<UniversalEngine> {
         let features = self.get_features(compiler_config.default_features_for_target(&target))?;
-        let engine: Box<dyn Engine + Send + Sync> = match engine_type {
-            #[cfg(feature = "universal")]
-            EngineType::Universal => Box::new(
-                wasmer_engine_universal::Universal::new(compiler_config)
-                    .features(features)
-                    .target(target)
-                    .engine(),
-            ),
-            #[cfg(not(all(feature = "universal")))]
-            engine => bail!(
-                "The `{}` engine is not included in this binary.",
-                engine.to_string()
-            ),
-        };
+        let engine: UniversalEngine = wasmer_engine_universal::Universal::new(compiler_config)
+            .features(features)
+            .target(target)
+            .engine();
 
         Ok(engine)
     }
@@ -321,101 +298,48 @@ impl ToString for CompilerType {
     }
 }
 
-/// The engine used for the store
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
-pub enum EngineType {
-    /// Universal Engine
-    Universal,
-}
-
-impl ToString for EngineType {
-    fn to_string(&self) -> String {
-        match self {
-            Self::Universal => "universal".to_string(),
-        }
-    }
-}
-
 #[cfg(all(feature = "compiler", feature = "engine"))]
 impl StoreOptions {
     /// Gets the store for the host target, with the engine name and compiler name selected
-    pub fn get_store(&self) -> Result<(Store, EngineType, CompilerType)> {
+    pub fn get_store(&self) -> Result<(Store, CompilerType)> {
         let target = Target::default();
         self.get_store_for_target(target)
     }
 
     /// Gets the store for a given target, with the engine name and compiler name selected, as
-    pub fn get_store_for_target(
-        &self,
-        target: Target,
-    ) -> Result<(Store, EngineType, CompilerType)> {
+    pub fn get_store_for_target(&self, target: Target) -> Result<(Store, CompilerType)> {
         let (compiler_config, compiler_type) = self.compiler.get_compiler_config()?;
-        let (engine, engine_type) = self.get_engine_with_compiler(target, compiler_config)?;
-        let store = Store::new(&*engine);
-        Ok((store, engine_type, compiler_type))
+        let engine = self.get_engine_with_compiler(target, compiler_config)?;
+        let store = Store::new(Arc::new(engine));
+        Ok((store, compiler_type))
     }
 
     fn get_engine_with_compiler(
         &self,
         target: Target,
         compiler_config: Box<dyn CompilerConfig>,
-    ) -> Result<(Box<dyn Engine + Send + Sync>, EngineType)> {
-        let engine_type = self.get_engine()?;
-        let engine = self
-            .compiler
-            .get_engine_by_type(target, compiler_config, engine_type)?;
+    ) -> Result<UniversalEngine> {
+        let engine = self.compiler.get_engine(target, compiler_config)?;
 
-        Ok((engine, engine_type))
+        Ok(engine)
     }
 }
-
-#[cfg(feature = "engine")]
-impl StoreOptions {
-    fn get_engine(&self) -> Result<EngineType> {
-        if self.universal || self.jit {
-            Ok(EngineType::Universal)
-        } else {
-            // Auto mode, we choose the best engine for that platform
-            if cfg!(feature = "universal") {
-                Ok(EngineType::Universal)
-            } else {
-                bail!("There are no available engines for your architecture")
-            }
-        }
-    }
-}
-
 // If we don't have a compiler, but we have an engine
 #[cfg(all(not(feature = "compiler"), feature = "engine"))]
 impl StoreOptions {
-    fn get_engine_headless(&self) -> Result<(Arc<dyn Engine + Send + Sync>, EngineType)> {
-        let engine_type = self.get_engine()?;
-        let engine: Arc<dyn Engine + Send + Sync> = match engine_type {
-            #[cfg(feature = "universal")]
-            EngineType::Universal => {
-                Arc::new(wasmer_engine_universal::Universal::headless().engine())
-            }
-            #[cfg(not(all(feature = "universal")))]
-            engine => bail!(
-                "The `{}` engine is not included in this binary.",
-                engine.to_string()
-            ),
-        };
-        Ok((engine, engine_type))
+    fn get_engine_headless(&self) -> UniversalEngine {
+        wasmer_engine_universal::Universal::headless().engine()
     }
 
     /// Get the store (headless engine)
-    pub fn get_store(&self) -> Result<(Store, EngineType, CompilerType)> {
-        let (engine, engine_type) = self.get_engine_headless()?;
-        let store = Store::new(&*engine);
-        Ok((store, engine_type, CompilerType::Headless))
+    pub fn get_store(&self) -> Result<(Store, CompilerType)> {
+        let engine = self.get_engine_headless();
+        let store = Store::new(Arc::new(engine));
+        Ok((store, CompilerType::Headless))
     }
 
     /// Gets the store for provided host target
-    pub fn get_store_for_target(
-        &self,
-        _target: Target,
-    ) -> Result<(Store, EngineType, CompilerType)> {
+    pub fn get_store_for_target(&self, _target: Target) -> Result<(Store, CompilerType)> {
         bail!("You need compilers to retrieve a store for a specific target");
     }
 }
@@ -424,15 +348,12 @@ impl StoreOptions {
 #[cfg(not(feature = "engine"))]
 impl StoreOptions {
     /// Get the store (headless engine)
-    pub fn get_store(&self) -> Result<(Store, EngineType, CompilerType)> {
+    pub fn get_store(&self) -> Result<(Store, CompilerType)> {
         bail!("No engines are enabled");
     }
 
     /// Gets the store for the host target
-    pub fn get_store_for_target(
-        &self,
-        _target: Target,
-    ) -> Result<(Store, EngineType, CompilerType)> {
+    pub fn get_store_for_target(&self, _target: Target) -> Result<(Store, CompilerType)> {
         bail!("No engines are enabled");
     }
 }

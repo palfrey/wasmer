@@ -2,12 +2,16 @@ use crate::sys::exports::Exportable;
 use crate::sys::store::Store;
 use crate::sys::types::{ExportType, ImportType};
 use crate::sys::InstantiationError;
+use std::convert::TryFrom;
 use std::fmt;
 use std::io;
 use std::path::Path;
 use std::sync::Arc;
 use thiserror::Error;
 use wasmer_engine::Artifact;
+use wasmer_engine::ArtifactCreate;
+use wasmer_engine_universal::UniversalArtifact;
+use wasmer_engine_universal::UniversalArtifactBuildRef;
 #[cfg(feature = "wat")]
 use wasmer_types::WasmError;
 use wasmer_types::{
@@ -49,7 +53,7 @@ pub struct Module {
     //
     // In the future, this code should be refactored to properly describe the
     // ownership of the code and its metadata.
-    artifact: Arc<dyn Artifact>,
+    artifact: Arc<UniversalArtifact>,
     module_info: Arc<ModuleInfo>,
     store: Store,
 }
@@ -176,8 +180,11 @@ impl Module {
     }
 
     fn compile(store: &Store, binary: &[u8]) -> Result<Self, CompileError> {
-        let artifact = store.engine().compile(binary, store.tunables())?;
-        Ok(Self::from_artifact(store, artifact))
+        let build = store.engine().compile_build(binary, store.tunables())?;
+        let bytes = build.serialize().unwrap();
+        let buildref = UniversalArtifactBuildRef::try_from(bytes.as_slice()).unwrap();
+        let artifact = store.engine().from_build(buildref)?;
+        Ok(Self::from_artifact(store, Arc::new(artifact)))
     }
 
     /// Serializes a module into a binary representation that the `Engine`
@@ -240,36 +247,11 @@ impl Module {
     /// # }
     /// ```
     pub unsafe fn deserialize(store: &Store, bytes: &[u8]) -> Result<Self, DeserializeError> {
-        let artifact = store.engine().deserialize(bytes)?;
+        let artifact = Arc::new(store.engine().deserialize(bytes)?);
         Ok(Self::from_artifact(store, artifact))
     }
 
-    /// Deserializes a a serialized Module located in a `Path` into a `Module`.
-    /// > Note: the module has to be serialized before with the `serialize` method.
-    ///
-    /// # Safety
-    ///
-    /// Please check [`Module::deserialize`].
-    ///
-    /// # Usage
-    ///
-    /// ```ignore
-    /// # use wasmer::*;
-    /// # let store = Store::default();
-    /// # fn main() -> anyhow::Result<()> {
-    /// let module = Module::deserialize_from_file(&store, path)?;
-    /// # Ok(())
-    /// # }
-    /// ```
-    pub unsafe fn deserialize_from_file(
-        store: &Store,
-        path: impl AsRef<Path>,
-    ) -> Result<Self, DeserializeError> {
-        let artifact = store.engine().deserialize_from_file(path.as_ref())?;
-        Ok(Self::from_artifact(store, artifact))
-    }
-
-    fn from_artifact(store: &Store, artifact: Arc<dyn Artifact>) -> Self {
+    fn from_artifact(store: &Store, artifact: Arc<UniversalArtifact>) -> Self {
         Self {
             store: store.clone(),
             module_info: Arc::new(artifact.create_module_info()),
@@ -439,7 +421,7 @@ impl Module {
     /// this functionality is required for some core functionality though, like
     /// the object file engine.
     #[doc(hidden)]
-    pub fn artifact(&self) -> &Arc<dyn Artifact> {
+    pub fn artifact(&self) -> &Arc<UniversalArtifact> {
         &self.artifact
     }
 }

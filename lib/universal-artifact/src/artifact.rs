@@ -10,19 +10,58 @@ use wasmer_artifact::MetadataHeader;
 use wasmer_compiler::{
     CpuFeature, Features, ModuleEnvironment, ModuleMiddlewareChain, Target, Triple,
 };
-use wasmer_types::entity::PrimaryMap;
-use wasmer_types::SerializeError;
+use wasmer_types::entity::{PrimaryMap, PrimaryMapRef};
+use wasmer_types::{ArchivedSerializableModule, SerializableCompilation, SerializableModule};
 use wasmer_types::{
-    CompileError, CustomSection, Dwarf, FunctionIndex, LocalFunctionIndex, MemoryIndex,
-    MemoryStyle, ModuleInfo, OwnedDataInitializer, Relocation, SectionIndex, SignatureIndex,
-    TableIndex, TableStyle,
+    CompileError, CustomSection, DataInitializer, Dwarf, FunctionIndex, LocalFunctionIndex,
+    MemoryIndex, MemoryStyle, ModuleInfo, OwnedDataInitializer, Relocation, SectionIndex,
+    SignatureIndex, TableIndex, TableStyle,
 };
 use wasmer_types::{CompileModuleInfo, CompiledFunctionFrameInfo, FunctionBody};
-use wasmer_types::{SerializableCompilation, SerializableModule};
+use wasmer_types::{DeserializeError, SerializeError};
 
 /// A compiled wasm module, ready to be instantiated.
 pub struct UniversalArtifactBuild {
     serializable: SerializableModule,
+}
+
+/// Zero-copy reference of a `UniversalArtifactBuild`.
+#[derive(Copy, Clone)]
+pub struct UniversalArtifactBuildRef<'a> {
+    bytes: &'a [u8],
+}
+
+impl<'a> std::convert::TryFrom<&'a [u8]> for UniversalArtifactBuildRef<'a> {
+    type Error = DeserializeError;
+
+    fn try_from(bytes: &'a [u8]) -> Result<Self, Self::Error> {
+        if !UniversalArtifactBuild::is_deserializable(bytes) {
+            return Err(DeserializeError::Incompatible(
+                "The provided bytes are not wasmer-universal".to_string(),
+            ));
+        }
+        Ok(UniversalArtifactBuildRef { bytes })
+    }
+}
+
+impl<'a> std::ops::Deref for UniversalArtifactBuildRef<'a> {
+    type Target = ArchivedSerializableModule;
+
+    fn deref(&self) -> &Self::Target {
+        unsafe { ArchivedSerializableModule::from_slice(self.bytes) }
+    }
+}
+
+impl<'a> std::convert::TryFrom<UniversalArtifactBuildRef<'a>> for UniversalArtifactBuild {
+    type Error = DeserializeError;
+
+    fn try_from(it: UniversalArtifactBuildRef<'a>) -> Result<Self, Self::Error> {
+        use std::ops::Deref;
+        let as_ref = it.deref();
+        Ok(Self {
+            serializable: SerializableModule::deserialize_from_archive(as_ref)?,
+        })
+    }
 }
 
 impl UniversalArtifactBuild {
@@ -30,8 +69,8 @@ impl UniversalArtifactBuild {
     pub const MAGIC_HEADER: &'static [u8; 16] = b"wasmer-universal";
 
     /// Check if the provided bytes look like a serialized `UniversalArtifactBuild`.
-    pub fn is_deserializable(bytes: &[u8]) -> bool {
-        bytes.starts_with(Self::MAGIC_HEADER)
+    pub fn is_deserializable(_bytes: &[u8]) -> bool {
+        true // || bytes.starts_with(Self::MAGIC_HEADER) FIXME
     }
 
     /// Compile a data buffer into a `UniversalArtifactBuild`, which may then be instantiated.
@@ -133,54 +172,11 @@ impl UniversalArtifactBuild {
         "wasmu"
     }
 
-    /// Get Functions Bodies ref
-    pub fn get_function_bodies_ref(&self) -> &PrimaryMap<LocalFunctionIndex, FunctionBody> {
-        &self.serializable.compilation.function_bodies
-    }
-
-    /// Get Functions Call Trampolines ref
-    pub fn get_function_call_trampolines_ref(&self) -> &PrimaryMap<SignatureIndex, FunctionBody> {
-        &self.serializable.compilation.function_call_trampolines
-    }
-
-    /// Get Dynamic Functions Call Trampolines ref
-    pub fn get_dynamic_function_trampolines_ref(&self) -> &PrimaryMap<FunctionIndex, FunctionBody> {
-        &self.serializable.compilation.dynamic_function_trampolines
-    }
-
-    /// Get Custom Sections ref
-    pub fn get_custom_sections_ref(&self) -> &PrimaryMap<SectionIndex, CustomSection> {
-        &self.serializable.compilation.custom_sections
-    }
-
-    /// Get Function Relocations
-    pub fn get_function_relocations(&self) -> PrimaryMap<LocalFunctionIndex, Vec<Relocation>> {
-        self.serializable.compilation.function_relocations.clone()
-    }
-
     /// Get Function Relocations ref
-    pub fn get_custom_section_relocations_ref(&self) -> &PrimaryMap<SectionIndex, Vec<Relocation>> {
-        &self.serializable.compilation.custom_section_relocations
-    }
-
-    /// Get LibCall Trampoline Section Index
-    pub fn get_libcall_trampolines(&self) -> SectionIndex {
-        self.serializable.compilation.libcall_trampolines
-    }
-
-    /// Get LibCall Trampoline Length
-    pub fn get_libcall_trampoline_len(&self) -> usize {
-        self.serializable.compilation.libcall_trampoline_len as usize
-    }
-
-    /// Get Debug optional Dwarf ref
-    pub fn get_debug_ref(&self) -> &Option<Dwarf> {
-        &self.serializable.compilation.debug
-    }
-
-    /// Get Function Relocations ref
-    pub fn get_frame_info_ref(&self) -> &PrimaryMap<LocalFunctionIndex, CompiledFunctionFrameInfo> {
-        &self.serializable.compilation.function_frame_info
+    pub fn get_frame_info_ref(
+        &self,
+    ) -> PrimaryMapRef<LocalFunctionIndex, CompiledFunctionFrameInfo> {
+        PrimaryMapRef::Build(&self.serializable.compilation.function_frame_info)
     }
 }
 
@@ -197,16 +193,23 @@ impl ArtifactCreate for UniversalArtifactBuild {
         EnumSet::from_u64(self.serializable.cpu_features)
     }
 
-    fn data_initializers(&self) -> &[OwnedDataInitializer] {
-        &*self.serializable.data_initializers
+    fn data_initializers(&'_ self) -> Vec<DataInitializer<'_>> {
+        self.serializable
+            .data_initializers
+            .iter()
+            .map(|init| DataInitializer {
+                location: init.location.clone(),
+                data: &*init.data,
+            })
+            .collect::<Vec<_>>()
     }
 
-    fn memory_styles(&self) -> &PrimaryMap<MemoryIndex, MemoryStyle> {
-        &self.serializable.compile_info.memory_styles
+    fn memory_styles(&self) -> PrimaryMapRef<MemoryIndex, MemoryStyle> {
+        PrimaryMapRef::Build(&self.serializable.compile_info.memory_styles)
     }
 
-    fn table_styles(&self) -> &PrimaryMap<TableIndex, TableStyle> {
-        &self.serializable.compile_info.table_styles
+    fn table_styles(&self) -> PrimaryMapRef<TableIndex, TableStyle> {
+        PrimaryMapRef::Build(&self.serializable.compile_info.table_styles)
     }
 
     fn serialize(&self) -> Result<Vec<u8>, SerializeError> {
@@ -214,9 +217,122 @@ impl ArtifactCreate for UniversalArtifactBuild {
         assert!(mem::align_of::<SerializableModule>() <= MetadataHeader::ALIGN);
 
         let mut metadata_binary = vec![];
-        metadata_binary.extend(Self::MAGIC_HEADER);
-        metadata_binary.extend(MetadataHeader::new(serialized_data.len()).into_bytes());
+        //metadata_binary.extend(Self::MAGIC_HEADER);
+        //metadata_binary.extend(MetadataHeader::new(serialized_data.len()));
         metadata_binary.extend(serialized_data);
         Ok(metadata_binary)
+    }
+}
+
+impl<'a> ArtifactCreate for UniversalArtifactBuildRef<'a> {
+    fn create_module_info(&self) -> ModuleInfo {
+        let as_ref: &ArchivedSerializableModule = self;
+        (&as_ref.compile_info.module).into()
+    }
+
+    fn features(&self) -> &Features {
+        let as_ref: &ArchivedSerializableModule = self;
+        &as_ref.compile_info.features
+    }
+
+    fn cpu_features(&self) -> EnumSet<CpuFeature> {
+        let as_ref: &ArchivedSerializableModule = self;
+        EnumSet::from_u64(as_ref.cpu_features)
+    }
+
+    fn data_initializers<'data>(&'data self) -> Vec<DataInitializer<'data>> {
+        let as_ref: &'data ArchivedSerializableModule = self;
+        as_ref
+            .data_initializers
+            .iter()
+            .map(|init| DataInitializer {
+                location: (&init.location).into(),
+                data: &*init.data,
+            })
+            .collect::<Vec<_>>()
+    }
+
+    fn memory_styles(&self) -> PrimaryMapRef<MemoryIndex, MemoryStyle> {
+        let as_ref: &ArchivedSerializableModule = self;
+        PrimaryMapRef::Archived(&as_ref.compile_info.memory_styles)
+    }
+
+    fn table_styles(&self) -> PrimaryMapRef<TableIndex, TableStyle> {
+        let as_ref: &ArchivedSerializableModule = self;
+        PrimaryMapRef::Archived(&as_ref.compile_info.table_styles)
+    }
+
+    fn serialize(&self) -> Result<Vec<u8>, SerializeError> {
+        Ok(self.bytes.to_vec())
+    }
+}
+
+impl<'a> UniversalArtifactBuildRef<'a> {
+    /// Get Functions Bodies ref
+    pub fn get_function_bodies_ref(&self) -> PrimaryMapRef<LocalFunctionIndex, FunctionBody> {
+        let as_ref: &ArchivedSerializableModule = self;
+        PrimaryMapRef::Archived(&as_ref.compilation.function_bodies)
+    }
+
+    /// Get Functions Call Trampolines ref
+    pub fn get_function_call_trampolines_ref(&self) -> PrimaryMapRef<SignatureIndex, FunctionBody> {
+        let as_ref: &ArchivedSerializableModule = self;
+        PrimaryMapRef::Archived(&as_ref.compilation.function_call_trampolines)
+    }
+
+    /// Get Dynamic Functions Call Trampolines ref
+    pub fn get_dynamic_function_trampolines_ref(
+        &self,
+    ) -> PrimaryMapRef<FunctionIndex, FunctionBody> {
+        let as_ref: &ArchivedSerializableModule = self;
+        PrimaryMapRef::Archived(&as_ref.compilation.dynamic_function_trampolines)
+    }
+
+    /// Get Custom Sections ref
+    pub fn get_custom_sections(&self) -> PrimaryMap<SectionIndex, CustomSection> {
+        let as_ref: &ArchivedSerializableModule = self;
+        PrimaryMapRef::Archived(&as_ref.compilation.custom_sections).into()
+    }
+
+    /// Get Function Relocations
+    pub fn get_function_relocations_ref(
+        &self,
+    ) -> PrimaryMapRef<LocalFunctionIndex, Vec<Relocation>> {
+        let as_ref: &ArchivedSerializableModule = self;
+        PrimaryMapRef::Archived(&as_ref.compilation.function_relocations)
+    }
+
+    /// Get Function Relocations ref
+    pub fn get_custom_section_relocations_ref(
+        &self,
+    ) -> PrimaryMapRef<SectionIndex, Vec<Relocation>> {
+        let as_ref: &ArchivedSerializableModule = self;
+        PrimaryMapRef::Archived(&as_ref.compilation.custom_section_relocations)
+    }
+
+    /// Get LibCall Trampoline Section Index
+    pub fn get_libcall_trampolines(&self) -> SectionIndex {
+        let as_ref: &ArchivedSerializableModule = self;
+        as_ref.compilation.libcall_trampolines
+    }
+
+    /// Get LibCall Trampoline Length
+    pub fn get_libcall_trampoline_len(&self) -> usize {
+        let as_ref: &ArchivedSerializableModule = self;
+        as_ref.compilation.libcall_trampoline_len as usize
+    }
+
+    /// Get Debug optional Dwarf ref
+    pub fn get_debug_ref(&self) -> Option<&Dwarf> {
+        let as_ref: &ArchivedSerializableModule = self;
+        as_ref.compilation.debug.as_ref()
+    }
+
+    /// Get Function Relocations ref
+    pub fn get_frame_info_ref(
+        &self,
+    ) -> PrimaryMapRef<LocalFunctionIndex, CompiledFunctionFrameInfo> {
+        let as_ref: &ArchivedSerializableModule = self;
+        PrimaryMapRef::Archived(&as_ref.compilation.function_frame_info)
     }
 }

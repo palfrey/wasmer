@@ -52,7 +52,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let engine = Universal::new(compiler_config).engine();
 
     // Create a store, that holds the engine.
-    let store = Store::new(&engine);
+    let store = Store::new(engine.into());
 
     println!("Compiling module...");
     // Here we go.

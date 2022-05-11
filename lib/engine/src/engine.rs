@@ -1,12 +1,12 @@
 //! Engine trait and associated types.
 
 use crate::tunables::Tunables;
-use crate::Artifact;
-use memmap2::Mmap;
-use std::path::Path;
 use std::sync::atomic::{AtomicUsize, Ordering::SeqCst};
 use std::sync::Arc;
 use wasmer_compiler::Target;
+use wasmer_engine_universal_artifact::UniversalArtifactBuild;
+use wasmer_engine_universal_artifact::UniversalArtifactBuildRef;
+
 use wasmer_types::{CompileError, DeserializeError, FunctionType};
 use wasmer_vm::{VMCallerCheckedAnyfunc, VMFuncRef, VMSharedSignatureIndex};
 
@@ -17,6 +17,8 @@ use wasmer_vm::{VMCallerCheckedAnyfunc, VMFuncRef, VMSharedSignatureIndex};
 ///
 /// The product that an `Engine` produces and consumes is the [`Artifact`].
 pub trait Engine {
+    /// The Artifact type.
+    type Artifact;
     /// Gets the target
     fn target(&self) -> &Target;
 
@@ -32,33 +34,27 @@ pub trait Engine {
     /// Validates a WebAssembly module
     fn validate(&self, binary: &[u8]) -> Result<(), CompileError>;
 
-    /// Compile a WebAssembly binary
-    fn compile(
+    /// Make a WebAssembly build
+    fn compile_build(
         &self,
         binary: &[u8],
         tunables: &dyn Tunables,
-    ) -> Result<Arc<dyn Artifact>, CompileError>;
+    ) -> Result<UniversalArtifactBuild, CompileError>;
+
+    /// Compile a WebAssembly binary
+    fn from_build(
+        &self,
+        build: UniversalArtifactBuildRef<'_>,
+    ) -> Result<Self::Artifact, CompileError>
+    where
+        Self::Artifact: Sized;
 
     /// Deserializes a WebAssembly module
     ///
     /// # Safety
     ///
     /// The serialized content must represent a serialized WebAssembly module.
-    unsafe fn deserialize(&self, bytes: &[u8]) -> Result<Arc<dyn Artifact>, DeserializeError>;
-
-    /// Deserializes a WebAssembly module from a path
-    ///
-    /// # Safety
-    ///
-    /// The file's content must represent a serialized WebAssembly module.
-    unsafe fn deserialize_from_file(
-        &self,
-        file_ref: &Path,
-    ) -> Result<Arc<dyn Artifact>, DeserializeError> {
-        let file = std::fs::File::open(file_ref)?;
-        let mmap = Mmap::map(&file)?;
-        self.deserialize(&mmap)
-    }
+    unsafe fn deserialize(&self, bytes: &'_ [u8]) -> Result<Self::Artifact, DeserializeError>;
 
     /// A unique identifier for this object.
     ///
@@ -68,7 +64,7 @@ pub trait Engine {
     fn id(&self) -> &EngineId;
 
     /// Clone the engine
-    fn cloned(&self) -> Arc<dyn Engine + Send + Sync>;
+    fn cloned(&self) -> Arc<dyn Engine<Artifact = Self::Artifact> + Send + Sync>;
 }
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]

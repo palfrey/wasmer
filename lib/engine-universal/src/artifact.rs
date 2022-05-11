@@ -4,21 +4,20 @@
 use crate::engine::{UniversalEngine, UniversalEngineInner};
 use crate::link::link_module;
 use enumset::EnumSet;
+use std::convert::TryFrom;
 use std::sync::{Arc, Mutex};
 #[cfg(feature = "compiler")]
 use wasmer_compiler::ModuleEnvironment;
 use wasmer_compiler::{CpuFeature, Features, Triple};
-use wasmer_engine::{
-    register_frame_info, Artifact, FunctionExtent, GlobalFrameInfoRegistration, MetadataHeader,
-};
 #[cfg(feature = "compiler")]
-use wasmer_engine::{Engine, Tunables};
+use wasmer_engine::Tunables;
+use wasmer_engine::{register_frame_info, Artifact, FunctionExtent, GlobalFrameInfoRegistration};
 use wasmer_engine_universal_artifact::ArtifactCreate;
-use wasmer_engine_universal_artifact::UniversalArtifactBuild;
-use wasmer_types::entity::{BoxedSlice, PrimaryMap};
+use wasmer_engine_universal_artifact::{UniversalArtifactBuild, UniversalArtifactBuildRef};
+use wasmer_types::entity::{BoxedSlice, PrimaryMap, PrimaryMapRef};
 use wasmer_types::{
-    CompileError, DeserializeError, FunctionIndex, LocalFunctionIndex, MemoryIndex, ModuleInfo,
-    OwnedDataInitializer, SerializableModule, SerializeError, SignatureIndex, TableIndex,
+    CompileError, DataInitializer, DeserializeError, FunctionIndex, LocalFunctionIndex,
+    MemoryIndex, ModuleInfo, SerializeError, SignatureIndex, TableIndex,
 };
 use wasmer_vm::{
     FuncDataRegistry, FunctionBodyPtr, MemoryStyle, TableStyle, VMSharedSignatureIndex,
@@ -40,11 +39,11 @@ pub struct UniversalArtifact {
 impl UniversalArtifact {
     /// Compile a data buffer into a `UniversalArtifactBuild`, which may then be instantiated.
     #[cfg(feature = "compiler")]
-    pub fn new(
+    pub fn new_build(
         engine: &UniversalEngine,
         data: &[u8],
         tunables: &dyn Tunables,
-    ) -> Result<Self, CompileError> {
+    ) -> Result<UniversalArtifactBuild, CompileError> {
         let environ = ModuleEnvironment::new();
         let mut inner_engine = engine.inner_mut();
         let translation = environ.translate(data).map_err(CompileError::Wasm)?;
@@ -60,20 +59,18 @@ impl UniversalArtifact {
             .map(|table_type| tunables.table_style(table_type))
             .collect();
 
-        let artifact = UniversalArtifactBuild::new(
+        UniversalArtifactBuild::new(
             inner_engine.builder_mut(),
             data,
             engine.target(),
             memory_styles,
             table_styles,
-        )?;
-
-        Self::from_parts(&mut inner_engine, artifact)
+        )
     }
 
     /// Compile a data buffer into a `UniversalArtifactBuild`, which may then be instantiated.
     #[cfg(not(feature = "compiler"))]
-    pub fn new(_engine: &UniversalEngine, _data: &[u8]) -> Result<Self, CompileError> {
+    pub fn new_build(_engine: &UniversalEngine, _data: &[u8]) -> Result<Self, CompileError> {
         Err(CompileError::Codegen(
             "Compilation is not enabled in the engine".to_string(),
         ))
@@ -88,26 +85,25 @@ impl UniversalArtifact {
         engine: &UniversalEngine,
         bytes: &[u8],
     ) -> Result<Self, DeserializeError> {
-        if !UniversalArtifactBuild::is_deserializable(bytes) {
-            return Err(DeserializeError::Incompatible(
-                "The provided bytes are not wasmer-universal".to_string(),
-            ));
-        }
+        /*
         let bytes = &bytes[UniversalArtifactBuild::MAGIC_HEADER.len()..];
         let metadata_len = MetadataHeader::parse(bytes)?;
         let metadata_slice: &[u8] = &bytes[MetadataHeader::LEN..][..metadata_len];
         let serializable = SerializableModule::deserialize(metadata_slice)?;
         let artifact = UniversalArtifactBuild::from_serializable(serializable);
+        */
         let mut inner_engine = engine.inner_mut();
-        Self::from_parts(&mut inner_engine, artifact).map_err(DeserializeError::Compiler)
+        let build_ref = UniversalArtifactBuildRef::try_from(bytes)?;
+        Self::from_build(&mut inner_engine, build_ref).map_err(DeserializeError::Compiler)
     }
 
     /// Construct a `UniversalArtifactBuild` from component parts.
-    pub fn from_parts(
+    pub fn from_build(
         engine_inner: &mut UniversalEngineInner,
-        artifact: UniversalArtifactBuild,
+        artifact: UniversalArtifactBuildRef<'_>,
     ) -> Result<Self, CompileError> {
         let module_info = artifact.create_module_info();
+        let custom_sections_artifact = artifact.get_custom_sections();
         let (
             finished_functions,
             finished_function_call_trampolines,
@@ -115,18 +111,18 @@ impl UniversalArtifact {
             custom_sections,
         ) = engine_inner.allocate(
             &module_info,
-            artifact.get_function_bodies_ref(),
-            artifact.get_function_call_trampolines_ref(),
-            artifact.get_dynamic_function_trampolines_ref(),
-            artifact.get_custom_sections_ref(),
+            artifact.get_function_bodies_ref().into(),
+            artifact.get_function_call_trampolines_ref().into(),
+            artifact.get_dynamic_function_trampolines_ref().into(),
+            &custom_sections_artifact,
         )?;
 
         link_module(
             &module_info,
             &finished_functions,
-            artifact.get_function_relocations(),
+            artifact.get_function_relocations_ref().into(),
             &custom_sections,
-            artifact.get_custom_section_relocations_ref(),
+            artifact.get_custom_section_relocations_ref().into(),
             artifact.get_libcall_trampolines(),
             artifact.get_libcall_trampoline_len(),
         );
@@ -143,9 +139,7 @@ impl UniversalArtifact {
 
         let eh_frame = match artifact.get_debug_ref() {
             Some(debug) => {
-                let eh_frame_section_size = artifact.get_custom_sections_ref()[debug.eh_frame]
-                    .bytes
-                    .len();
+                let eh_frame_section_size = custom_sections_artifact[debug.eh_frame].bytes.len();
                 let eh_frame_section_pointer = custom_sections[debug.eh_frame];
                 Some(unsafe {
                     std::slice::from_raw_parts(*eh_frame_section_pointer, eh_frame_section_size)
@@ -177,7 +171,8 @@ impl UniversalArtifact {
         let func_data_registry = engine_inner.func_data().clone();
 
         Ok(Self {
-            artifact,
+            artifact: UniversalArtifactBuild::try_from(artifact)
+                .map_err(|err| CompileError::Validate(err.to_string()))?,
             finished_functions,
             finished_function_call_trampolines,
             finished_dynamic_function_trampolines,
@@ -187,10 +182,12 @@ impl UniversalArtifact {
             func_data_registry,
         })
     }
+
     /// Get the default extension when serializing this artifact
     pub fn get_default_extension(triple: &Triple) -> &'static str {
         UniversalArtifactBuild::get_default_extension(triple)
     }
+
     /// Check if the provided bytes look like a serialized `UniversalArtifactBuild`.
     pub fn is_deserializable(bytes: &[u8]) -> bool {
         UniversalArtifactBuild::is_deserializable(bytes)
@@ -210,15 +207,15 @@ impl ArtifactCreate for UniversalArtifact {
         self.artifact.cpu_features()
     }
 
-    fn data_initializers(&self) -> &[OwnedDataInitializer] {
+    fn data_initializers(&'_ self) -> Vec<DataInitializer<'_>> {
         self.artifact.data_initializers()
     }
 
-    fn memory_styles(&self) -> &PrimaryMap<MemoryIndex, MemoryStyle> {
+    fn memory_styles(&self) -> PrimaryMapRef<MemoryIndex, MemoryStyle> {
         self.artifact.memory_styles()
     }
 
-    fn table_styles(&self) -> &PrimaryMap<TableIndex, TableStyle> {
+    fn table_styles(&self) -> PrimaryMapRef<TableIndex, TableStyle> {
         self.artifact.table_styles()
     }
 
@@ -248,7 +245,7 @@ impl Artifact for UniversalArtifact {
         *info = register_frame_info(
             self.artifact.create_module_info(),
             &finished_function_extents,
-            frame_infos.clone(),
+            frame_infos.into(),
         );
     }
 

@@ -2,7 +2,7 @@
 
 use crate::{Export, ExportFunctionMetadata, LinkError};
 use more_asserts::assert_ge;
-use wasmer_types::entity::{BoxedSlice, EntityRef, PrimaryMap};
+use wasmer_types::entity::{BoxedSlice, EntityRef, PrimaryMap, PrimaryMapRef};
 use wasmer_types::{
     ExternType, FunctionIndex, ImportError, ImportIndex, MemoryIndex, ModuleInfo, TableIndex,
 };
@@ -56,8 +56,8 @@ pub fn resolve_imports(
     module: &ModuleInfo,
     imports: &[Export],
     finished_dynamic_function_trampolines: &BoxedSlice<FunctionIndex, FunctionBodyPtr>,
-    memory_styles: &PrimaryMap<MemoryIndex, MemoryStyle>,
-    _table_styles: &PrimaryMap<TableIndex, TableStyle>,
+    memory_styles: PrimaryMapRef<MemoryIndex, MemoryStyle>,
+    _table_styles: PrimaryMapRef<TableIndex, TableStyle>,
 ) -> Result<Imports, LinkError> {
     let mut function_imports = PrimaryMap::with_capacity(module.num_imported_functions);
     let mut host_function_env_initializers =

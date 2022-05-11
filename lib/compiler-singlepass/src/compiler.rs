@@ -321,7 +321,7 @@ mod tests {
     ) {
         let compile_info = CompileModuleInfo {
             features: Features::new(),
-            module: Arc::new(ModuleInfo::new()),
+            module: ModuleInfo::new(),
             memory_styles: PrimaryMap::<MemoryIndex, MemoryStyle>::new(),
             table_styles: PrimaryMap::<TableIndex, TableStyle>::new(),
         };

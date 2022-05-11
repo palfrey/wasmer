@@ -72,7 +72,10 @@ mod utils;
 mod values;
 mod vmoffsets;
 
-pub use crate::serialize::{SerializableCompilation, SerializableModule};
+pub use crate::serialize::{
+    ArchivedSerializableCompilation, ArchivedSerializableModule, SerializableCompilation,
+    SerializableModule,
+};
 pub use error::{
     CompileError, DeserializeError, ImportError, MiddlewareError, ParseCpuFeatureError,
     PreInstantiationError, SerializeError, WasmError, WasmResult,
@@ -131,6 +134,17 @@ pub type CodeOffset = u32;
 
 /// Addend to add to the symbol value.
 pub type Addend = i64;
+
+pub(crate) fn unrkyv<T>(archive: &T::Archived) -> T
+where
+    T: rkyv::Archive,
+    T::Archived: rkyv::Deserialize<T, rkyv::Infallible>,
+{
+    Result::<_, std::convert::Infallible>::unwrap(rkyv::Deserialize::deserialize(
+        archive,
+        &mut rkyv::Infallible,
+    ))
+}
 
 /// Version number of this crate.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
