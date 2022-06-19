@@ -161,6 +161,18 @@ impl Exports {
         Args: WasmTypeList,
         Rets: WasmTypeList,
     {
+        self.get_typed_function(name)
+    }
+
+    /// Get an export as a `TypedFunction`.
+    pub fn get_typed_function<Args, Rets>(
+        &self,
+        name: &str,
+    ) -> Result<TypedFunction<Args, Rets>, ExportError>
+    where
+        Args: WasmTypeList,
+        Rets: WasmTypeList,
+    {
         self.get_function(name)?
             .native(ctx)
             .map_err(|_| ExportError::IncompatibleType)
