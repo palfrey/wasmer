@@ -3,10 +3,12 @@ mod global;
 mod memory;
 mod table;
 
+use super::context::wasm_context_t;
 pub use function::*;
 pub use global::*;
 pub use memory::*;
 use std::mem::{self, ManuallyDrop};
+use std::sync::{Arc, Mutex};
 pub use table::*;
 use wasmer_api::{Extern, ExternType};
 
@@ -79,12 +81,43 @@ impl wasm_extern_t {
 
     pub(crate) fn ty(&self) -> ExternType {
         match self.get_tag() {
-            CApiExternTag::Function => {
-                ExternType::Function(unsafe { self.inner.function.inner.ty().clone() })
-            }
-            CApiExternTag::Memory => ExternType::Memory(unsafe { self.inner.memory.inner.ty() }),
-            CApiExternTag::Global => ExternType::Global(unsafe { *self.inner.global.inner.ty() }),
-            CApiExternTag::Table => ExternType::Table(unsafe { *self.inner.table.inner.ty() }),
+            CApiExternTag::Function => unsafe {
+                let ctx = self.inner.function.context.as_ref().unwrap();
+                let lck = ctx.lock().unwrap();
+                ExternType::Function(self.inner.function.inner.ty(&lck.inner))
+            },
+            CApiExternTag::Memory => unsafe {
+                let ctx = self.inner.memory.context.as_ref().unwrap();
+                let lck = ctx.lock().unwrap();
+                ExternType::Memory(self.inner.memory.inner.ty(&lck.inner))
+            },
+            CApiExternTag::Global => unsafe {
+                let ctx = self.inner.global.context.as_ref().unwrap();
+                let lck = ctx.lock().unwrap();
+                ExternType::Global(self.inner.global.inner.ty(&lck.inner))
+            },
+            CApiExternTag::Table => unsafe {
+                let ctx = self.inner.table.context.as_ref().unwrap();
+                let lck = ctx.lock().unwrap();
+                ExternType::Table(self.inner.table.inner.ty(&lck.inner))
+            },
+        }
+    }
+
+    pub(crate) fn set_context(&mut self, new_val: Option<Arc<Mutex<wasm_context_t>>>) {
+        match self.get_tag() {
+            CApiExternTag::Function => unsafe {
+                (*self.inner.function).context = new_val;
+            },
+            CApiExternTag::Memory => unsafe {
+                (*self.inner.memory).context = new_val;
+            },
+            CApiExternTag::Global => unsafe {
+                (*self.inner.global).context = new_val;
+            },
+            CApiExternTag::Table => unsafe {
+                (*self.inner.table).context = new_val;
+            },
         }
     }
 }
@@ -265,6 +298,8 @@ mod tests {
             int main() {
                 wasm_engine_t* engine = wasm_engine_new();
                 wasm_store_t* store = wasm_store_new(engine);
+                wasm_context_t* ctx = wasm_context_new(store, 0);
+                wasm_store_context_set(store, ctx);
 
                 wasm_byte_vec_t wat;
                 wasmer_byte_vec_new_from_string(

@@ -131,6 +131,7 @@
 //! # }
 //! ```
 
+use super::super::super::context::wasm_context_t;
 use super::super::super::instance::wasm_instance_t;
 use super::super::parser::operator::wasmer_parser_operator_t;
 use super::wasmer_middleware_t;
@@ -201,8 +202,11 @@ pub extern "C" fn wasmer_metering_delete(_metering: Option<Box<wasmer_metering_t
 ///
 /// See module's documentation.
 #[no_mangle]
-pub extern "C" fn wasmer_metering_get_remaining_points(instance: &wasm_instance_t) -> u64 {
-    match get_remaining_points(&instance.inner) {
+pub extern "C" fn wasmer_metering_get_remaining_points(
+    ctx: &mut wasm_context_t,
+    instance: &wasm_instance_t,
+) -> u64 {
+    match get_remaining_points(&mut ctx.inner, &instance.inner) {
         MeteringPoints::Remaining(value) => value,
         MeteringPoints::Exhausted => std::u64::MAX,
     }
@@ -214,9 +218,12 @@ pub extern "C" fn wasmer_metering_get_remaining_points(instance: &wasm_instance_
 ///
 /// See module's documentation.
 #[no_mangle]
-pub extern "C" fn wasmer_metering_points_are_exhausted(instance: &wasm_instance_t) -> bool {
+pub extern "C" fn wasmer_metering_points_are_exhausted(
+    ctx: &mut wasm_context_t,
+    instance: &wasm_instance_t,
+) -> bool {
     matches!(
-        get_remaining_points(&instance.inner),
+        get_remaining_points(&mut ctx.inner, &instance.inner),
         MeteringPoints::Exhausted,
     )
 }
@@ -294,8 +301,12 @@ pub extern "C" fn wasmer_metering_points_are_exhausted(instance: &wasm_instance_
 /// # }
 /// ```
 #[no_mangle]
-pub extern "C" fn wasmer_metering_set_remaining_points(instance: &wasm_instance_t, new_limit: u64) {
-    set_remaining_points(&instance.inner, new_limit);
+pub extern "C" fn wasmer_metering_set_remaining_points(
+    ctx: &mut wasm_context_t,
+    instance: &wasm_instance_t,
+    new_limit: u64,
+) {
+    set_remaining_points(&mut ctx.inner, &instance.inner, new_limit);
 }
 
 /// Transforms a [`wasmer_metering_t`] into a generic

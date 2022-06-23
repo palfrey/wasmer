@@ -1,14 +1,16 @@
-use super::externals::wasm_extern_vec_t;
+use super::context::wasm_context_t;
+use super::externals::{wasm_extern_t, wasm_extern_vec_t};
 use super::module::wasm_module_t;
 use super::store::wasm_store_t;
 use super::trap::wasm_trap_t;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use wasmer_api::{Extern, Instance, InstantiationError};
 
 /// Opaque type representing a WebAssembly instance.
 #[allow(non_camel_case_types)]
 pub struct wasm_instance_t {
     pub(crate) inner: Arc<Instance>,
+    pub(crate) context: Option<Arc<Mutex<wasm_context_t>>>,
 }
 
 /// Creates a new instance from a WebAssembly module and a
@@ -36,11 +38,13 @@ pub struct wasm_instance_t {
 /// See the module's documentation.
 #[no_mangle]
 pub unsafe extern "C" fn wasm_instance_new(
-    _store: Option<&wasm_store_t>,
+    store: Option<&wasm_store_t>,
     module: Option<&wasm_module_t>,
     imports: Option<&wasm_extern_vec_t>,
     trap: Option<&mut *mut wasm_trap_t>,
 ) -> Option<Box<wasm_instance_t>> {
+    let store = store?;
+    let ctx = store.context.as_ref()?;
     let module = module?;
     let imports = imports?;
 
@@ -54,7 +58,8 @@ pub unsafe extern "C" fn wasm_instance_new(
         .take(module_import_count)
         .collect::<Vec<Extern>>();
 
-    let instance = match Instance::new_by_index(wasm_module, &externs) {
+    let mut lck = ctx.lock().unwrap();
+    let instance = match Instance::new_by_index(&mut lck.inner, wasm_module, &externs) {
         Ok(instance) => Arc::new(instance),
 
         Err(InstantiationError::Link(link_error)) => {
@@ -78,14 +83,18 @@ pub unsafe extern "C" fn wasm_instance_new(
             return None;
         }
 
-        Err(InstantiationError::HostEnvInitialization(error)) => {
-            crate::error::update_last_error(error);
+        Err(e @ InstantiationError::BadContext) => {
+            crate::error::update_last_error(e);
 
             return None;
         }
     };
+    drop(lck);
 
-    Some(Box::new(wasm_instance_t { inner: instance }))
+    Some(Box::new(wasm_instance_t {
+        inner: instance,
+        context: store.context.clone(),
+    }))
 }
 
 /// Deletes an instance.
@@ -110,6 +119,7 @@ pub unsafe extern "C" fn wasm_instance_delete(_instance: Option<Box<wasm_instanc
 ///     // Create the engine and the store.
 ///     wasm_engine_t* engine = wasm_engine_new();
 ///     wasm_store_t* store = wasm_store_new(engine);
+///     wasm_context_t* ctx = wasm_context_new(store, 0);
 ///
 ///     // Create a WebAssembly module from a WAT definition.
 ///     wasm_byte_vec_t wat;
@@ -185,12 +195,16 @@ pub unsafe extern "C" fn wasm_instance_exports(
     // own
     out: &mut wasm_extern_vec_t,
 ) {
+    let original_instance = instance;
     let instance = &instance.inner;
-    let extern_vec = instance
+    let mut extern_vec: Vec<Option<Box<wasm_extern_t>>> = instance
         .exports
         .iter()
         .map(|(_name, r#extern)| Some(Box::new(r#extern.clone().into())))
         .collect();
+    for ex in extern_vec.iter_mut().flatten() {
+        ex.set_context(original_instance.context.clone());
+    }
 
     out.set_buffer(extern_vec);
 }
@@ -222,6 +236,8 @@ mod tests {
                 // Create the engine and the store.
                 wasm_engine_t* engine = wasm_engine_new();
                 wasm_store_t* store = wasm_store_new(engine);
+                wasm_context_t* ctx = wasm_context_new(store, 0);
+                wasm_store_context_set(store, ctx);
 
                 // Create a WebAssembly module from a WAT definition.
                 wasm_byte_vec_t wat;

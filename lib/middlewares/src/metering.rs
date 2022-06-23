@@ -282,14 +282,14 @@ impl<F: Fn(&Operator) -> u64 + Send + Sync> FunctionMiddleware for FunctionMeter
 /// }
 /// ```
 pub fn get_remaining_points<T>(
-    mut ctx: impl AsContextMut<Data = T>,
+    ctx: &mut impl AsContextMut<Data = T>,
     instance: &Instance,
 ) -> MeteringPoints {
     let exhausted: i32 = instance
         .exports
         .get_global("wasmer_metering_points_exhausted")
         .expect("Can't get `wasmer_metering_points_exhausted` from Instance")
-        .get(&mut ctx)
+        .get(&mut ctx.as_context_mut())
         .try_into()
         .expect("`wasmer_metering_points_exhausted` from Instance has wrong type");
 
@@ -301,7 +301,7 @@ pub fn get_remaining_points<T>(
         .exports
         .get_global("wasmer_metering_remaining_points")
         .expect("Can't get `wasmer_metering_remaining_points` from Instance")
-        .get(&mut ctx)
+        .get(&mut ctx.as_context_mut())
         .try_into()
         .expect("`wasmer_metering_remaining_points` from Instance has wrong type");
 
@@ -335,7 +335,7 @@ pub fn get_remaining_points<T>(
 /// }
 /// ```
 pub fn set_remaining_points<T>(
-    mut ctx: impl AsContextMut<Data = T>,
+    ctx: &mut impl AsContextMut<Data = T>,
     instance: &Instance,
     points: u64,
 ) {
@@ -343,14 +343,14 @@ pub fn set_remaining_points<T>(
         .exports
         .get_global("wasmer_metering_remaining_points")
         .expect("Can't get `wasmer_metering_remaining_points` from Instance")
-        .set(&mut ctx, points.into())
+        .set(&mut ctx.as_context_mut(), points.into())
         .expect("Can't set `wasmer_metering_remaining_points` in Instance");
 
     instance
         .exports
         .get_global("wasmer_metering_points_exhausted")
         .expect("Can't get `wasmer_metering_points_exhausted` from Instance")
-        .set(&mut ctx, 0i32.into())
+        .set(&mut ctx.as_context_mut(), 0i32.into())
         .expect("Can't set `wasmer_metering_points_exhausted` in Instance");
 }
 
@@ -400,7 +400,7 @@ mod tests {
         // Instantiate
         let instance = Instance::new(&mut ctx, &module, &imports! {}).unwrap();
         assert_eq!(
-            get_remaining_points(ctx.as_context_mut(), &instance),
+            get_remaining_points(&mut ctx.as_context_mut(), &instance),
             MeteringPoints::Remaining(10)
         );
 
@@ -418,21 +418,21 @@ mod tests {
             .unwrap();
         add_one.call(&mut ctx.as_context_mut(), 1).unwrap();
         assert_eq!(
-            get_remaining_points(ctx.as_context_mut(), &instance),
+            get_remaining_points(&mut ctx.as_context_mut(), &instance),
             MeteringPoints::Remaining(6)
         );
 
         // Second call
         add_one.call(&mut ctx.as_context_mut(), 1).unwrap();
         assert_eq!(
-            get_remaining_points(ctx.as_context_mut(), &instance),
+            get_remaining_points(&mut ctx.as_context_mut(), &instance),
             MeteringPoints::Remaining(2)
         );
 
         // Third call fails due to limit
         assert!(add_one.call(&mut ctx.as_context_mut(), 1).is_err());
         assert_eq!(
-            get_remaining_points(ctx.as_context_mut(), &instance),
+            get_remaining_points(&mut ctx.as_context_mut(), &instance),
             MeteringPoints::Exhausted
         );
     }
@@ -449,7 +449,7 @@ mod tests {
         // Instantiate
         let instance = Instance::new(&mut ctx, &module, &imports! {}).unwrap();
         assert_eq!(
-            get_remaining_points(ctx.as_context_mut(), &instance),
+            get_remaining_points(&mut ctx.as_context_mut(), &instance),
             MeteringPoints::Remaining(10)
         );
         let add_one: TypedFunction<i32, i32> = instance
@@ -460,37 +460,37 @@ mod tests {
             .unwrap();
 
         // Increase a bit to have enough for 3 calls
-        set_remaining_points(ctx.as_context_mut(), &instance, 12);
+        set_remaining_points(&mut ctx.as_context_mut(), &instance, 12);
 
         // Ensure we can use the new points now
         add_one.call(&mut ctx.as_context_mut(), 1).unwrap();
         assert_eq!(
-            get_remaining_points(ctx.as_context_mut(), &instance),
+            get_remaining_points(&mut ctx.as_context_mut(), &instance),
             MeteringPoints::Remaining(8)
         );
 
         add_one.call(&mut ctx.as_context_mut(), 1).unwrap();
         assert_eq!(
-            get_remaining_points(ctx.as_context_mut(), &instance),
+            get_remaining_points(&mut ctx.as_context_mut(), &instance),
             MeteringPoints::Remaining(4)
         );
 
         add_one.call(&mut ctx.as_context_mut(), 1).unwrap();
         assert_eq!(
-            get_remaining_points(ctx.as_context_mut(), &instance),
+            get_remaining_points(&mut ctx.as_context_mut(), &instance),
             MeteringPoints::Remaining(0)
         );
 
         assert!(add_one.call(&mut ctx.as_context_mut(), 1).is_err());
         assert_eq!(
-            get_remaining_points(ctx.as_context_mut(), &instance),
+            get_remaining_points(&mut ctx.as_context_mut(), &instance),
             MeteringPoints::Exhausted
         );
 
         // Add some points for another call
-        set_remaining_points(ctx.as_context_mut(), &instance, 4);
+        set_remaining_points(&mut ctx.as_context_mut(), &instance, 4);
         assert_eq!(
-            get_remaining_points(ctx.as_context_mut(), &instance),
+            get_remaining_points(&mut ctx.as_context_mut(), &instance),
             MeteringPoints::Remaining(4)
         );
     }
