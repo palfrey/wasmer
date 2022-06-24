@@ -190,6 +190,19 @@ impl ToString for Value {
     }
 }
 
+impl PartialEq for Value {
+    fn eq(&self, o: &Self) -> bool {
+        match (self, o) {
+            (Self::I32(a), Self::I32(b)) => a == b,
+            (Self::I64(a), Self::I64(b)) => a == b,
+            (Self::F32(a), Self::F32(b)) => a == b,
+            (Self::F64(a), Self::F64(b)) => a == b,
+            (Self::V128(a), Self::V128(b)) => a == b,
+            _ => false,
+        }
+    }
+}
+
 impl From<i32> for Value {
     fn from(val: i32) -> Self {
         Self::I32(val)
