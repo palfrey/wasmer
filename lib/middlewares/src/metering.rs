@@ -423,7 +423,7 @@ mod tests {
         );
 
         // Third call fails due to limit
-        assert!(add_one.call(1).is_err());
+        assert!(add_one.call(&mut ctx.as_context_mut(), 1).is_err());
         assert_eq!(
             get_remaining_points(&mut ctx.as_context_mut(), &instance),
             MeteringPoints::Exhausted
